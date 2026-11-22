@@ -1,0 +1,756 @@
+-- PARTE 1: Interfaz Delta, Hacks y Portapapeles Completo
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+if CoreGui:FindFirstChild("DeltaRemoteInspector") then
+    CoreGui.DeltaRemoteInspector:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaRemoteInspector"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui
+
+local FULL_SIZE = UDim2.new(0, 520, 0, 500)
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = FULL_SIZE
+MainFrame.Position = UDim2.new(0.5, -260, 0.5, -250)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(45, 50, 65)
+UIStroke.Thickness = 1.5
+UIStroke.Parent = MainFrame
+
+-- Barra superior arrastrable
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 36)
+TopBar.BackgroundColor3 = Color3.fromRGB(28, 31, 40)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 8)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -180, 1, 0)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "DELTA MINI SCRIPT & SERVER MOD"
+Title.TextColor3 = Color3.fromRGB(220, 225, 240)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 13
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+local SelectModeBtn = Instance.new("TextButton")
+SelectModeBtn.Size = UDim2.new(0, 102, 0, 24)
+SelectModeBtn.Position = UDim2.new(1, -172, 0.5, -12)
+SelectModeBtn.BackgroundColor3 = Color3.fromRGB(45, 110, 220)
+SelectModeBtn.Text = "Selector: OFF"
+SelectModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectModeBtn.Font = Enum.Font.GothamSemibold
+SelectModeBtn.TextSize = 11
+SelectModeBtn.Parent = TopBar
+Instance.new("UICorner", SelectModeBtn).CornerRadius = UDim.new(0, 5)
+
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Name = "MinimizeBtn"
+MinimizeBtn.Size = UDim2.new(0, 26, 0, 24)
+MinimizeBtn.Position = UDim2.new(1, -62, 0.5, -12)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(55, 60, 75)
+MinimizeBtn.Text = "-"
+MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.TextSize = 15
+MinimizeBtn.Parent = TopBar
+Instance.new("UICorner", MinimizeBtn).CornerRadius = UDim.new(0, 5)
+
+local ExpandBtn = Instance.new("TextButton")
+ExpandBtn.Name = "ExpandBtn"
+ExpandBtn.Size = UDim2.new(0, 26, 0, 24)
+ExpandBtn.Position = UDim2.new(1, -32, 0.5, -12)
+ExpandBtn.BackgroundColor3 = Color3.fromRGB(40, 165, 95)
+ExpandBtn.Text = "+"
+ExpandBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ExpandBtn.Font = Enum.Font.GothamBold
+ExpandBtn.TextSize = 15
+ExpandBtn.Parent = TopBar
+Instance.new("UICorner", ExpandBtn).CornerRadius = UDim.new(0, 5)
+
+-- Arrastre
+local dragging, dragInput, dragStart, startPos
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+    end
+end)
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- Contenedor de Hacks
+local HacksFrame = Instance.new("Frame")
+HacksFrame.Size = UDim2.new(1, -24, 0, 66)
+HacksFrame.Position = UDim2.new(0, 12, 0, 44)
+HacksFrame.BackgroundColor3 = Color3.fromRGB(25, 28, 36)
+HacksFrame.BorderSizePixel = 0
+HacksFrame.Parent = MainFrame
+Instance.new("UICorner", HacksFrame).CornerRadius = UDim.new(0, 6)
+
+local function MakeHackBtn(text, xPos, yPos, w, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(w, -4, 0, 26)
+    b.Position = UDim2.new(xPos, 2, 0, yPos)
+    b.BackgroundColor3 = color
+    b.Text = text
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamSemibold
+    b.TextSize = 11
+    b.Parent = HacksFrame
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
+    return b
+end
+
+local SpeedBtn = MakeHackBtn("Speed 100: OFF", 0, 4, 0.333, Color3.fromRGB(50, 56, 72))
+local JumpBtn = MakeHackBtn("JumpPower 300: OFF", 0.333, 4, 0.333, Color3.fromRGB(50, 56, 72))
+local TPToolBtn = MakeHackBtn("TP Tool", 0.666, 4, 0.334, Color3.fromRGB(70, 95, 165))
+local InfJumpBtn = MakeHackBtn("Salto Infinito: OFF", 0, 35, 0.5, Color3.fromRGB(50, 56, 72))
+local NoclipBtn = MakeHackBtn("Noclip: OFF", 0.5, 35, 0.5, Color3.fromRGB(50, 56, 72))
+
+-- Contenedor de 2 Modos: Auto Farm & Instant Steal
+local ModesFrame = Instance.new("Frame")
+ModesFrame.Size = UDim2.new(1, -24, 0, 74)
+ModesFrame.Position = UDim2.new(0, 12, 0, 116)
+ModesFrame.BackgroundColor3 = Color3.fromRGB(25, 28, 36)
+ModesFrame.BorderSizePixel = 0
+ModesFrame.Parent = MainFrame
+Instance.new("UICorner", ModesFrame).CornerRadius = UDim.new(0, 6)
+
+local AutoFarmToggle = Instance.new("TextButton")
+AutoFarmToggle.Size = UDim2.new(0.46, 0, 0, 28)
+AutoFarmToggle.Position = UDim2.new(0, 6, 0, 6)
+AutoFarmToggle.BackgroundColor3 = Color3.fromRGB(55, 62, 80)
+AutoFarmToggle.Text = "Auto Farm: OFF"
+AutoFarmToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoFarmToggle.Font = Enum.Font.GothamBold
+AutoFarmToggle.TextSize = 11
+AutoFarmToggle.Parent = ModesFrame
+Instance.new("UICorner", AutoFarmToggle).CornerRadius = UDim.new(0, 5)
+
+local DelayLabel = Instance.new("TextLabel")
+DelayLabel.Size = UDim2.new(0.24, 0, 0, 28)
+DelayLabel.Position = UDim2.new(0.48, 0, 0, 6)
+DelayLabel.BackgroundTransparency = 1
+DelayLabel.Text = "Velocidad (s):"
+DelayLabel.TextColor3 = Color3.fromRGB(190, 200, 220)
+DelayLabel.Font = Enum.Font.GothamSemibold
+DelayLabel.TextSize = 11
+DelayLabel.TextXAlignment = Enum.TextXAlignment.Right
+DelayLabel.Parent = ModesFrame
+
+local DelayBox = Instance.new("TextBox")
+DelayBox.Size = UDim2.new(0.24, 0, 0, 28)
+DelayBox.Position = UDim2.new(0.73, 0, 0, 6)
+DelayBox.BackgroundColor3 = Color3.fromRGB(15, 17, 22)
+DelayBox.Text = "0.6"
+DelayBox.PlaceholderText = "0.6"
+DelayBox.TextColor3 = Color3.fromRGB(130, 220, 160)
+DelayBox.Font = Enum.Font.Code
+DelayBox.TextSize = 12
+DelayBox.ClearTextOnFocus = false
+DelayBox.Parent = ModesFrame
+Instance.new("UICorner", DelayBox).CornerRadius = UDim.new(0, 5)
+
+local InstantStealToggle = Instance.new("TextButton")
+InstantStealToggle.Size = UDim2.new(1, -12, 0, 28)
+InstantStealToggle.Position = UDim2.new(0, 6, 0, 40)
+InstantStealToggle.BackgroundColor3 = Color3.fromRGB(55, 62, 80)
+InstantStealToggle.Text = "Instant Steal: OFF"
+InstantStealToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+InstantStealToggle.Font = Enum.Font.GothamBold
+InstantStealToggle.TextSize = 11
+InstantStealToggle.Parent = ModesFrame
+Instance.new("UICorner", InstantStealToggle).CornerRadius = UDim.new(0, 5)
+
+-- Caja del Mini Script con auto-ajuste para portapapeles completo
+local ScriptBoxFrame = Instance.new("ScrollingFrame")
+ScriptBoxFrame.Size = UDim2.new(1, -24, 0, 240)
+ScriptBoxFrame.Position = UDim2.new(0, 12, 0, 196)
+ScriptBoxFrame.BackgroundColor3 = Color3.fromRGB(14, 15, 20)
+ScriptBoxFrame.BorderSizePixel = 0
+ScriptBoxFrame.ScrollBarThickness = 4
+ScriptBoxFrame.CanvasSize = UDim2.new(0, 0, 0, 240)
+ScriptBoxFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScriptBoxFrame.Parent = MainFrame
+Instance.new("UICorner", ScriptBoxFrame).CornerRadius = UDim.new(0, 6)
+
+local CodeBox = Instance.new("TextBox")
+CodeBox.Size = UDim2.new(1, -12, 0, 228)
+CodeBox.AutomaticSize = Enum.AutomaticSize.Y
+CodeBox.Position = UDim2.new(0, 6, 0, 6)
+CodeBox.BackgroundTransparency = 1
+CodeBox.Text = ""
+CodeBox.TextColor3 = Color3.fromRGB(130, 220, 160)
+CodeBox.Font = Enum.Font.Code
+CodeBox.TextSize = 12
+CodeBox.TextXAlignment = Enum.TextXAlignment.Left
+CodeBox.TextYAlignment = Enum.TextYAlignment.Top
+CodeBox.MultiLine = true
+CodeBox.ClearTextOnFocus = false
+CodeBox.TextWrapped = true
+CodeBox.Parent = ScriptBoxFrame
+
+-- Botones COPY, CLEAR, EXECUTE
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Size = UDim2.new(1, -24, 0, 38)
+ButtonContainer.Position = UDim2.new(0, 12, 1, -48)
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Parent = MainFrame
+
+local function SetMinimized(minimized)
+    if minimized then
+        MainFrame.Size = UDim2.new(0, MainFrame.AbsoluteSize.X, 0, 36)
+        HacksFrame.Visible = false
+        ModesFrame.Visible = false
+        ScriptBoxFrame.Visible = false
+        ButtonContainer.Visible = false
+    else
+        MainFrame.Size = UDim2.new(0, MainFrame.AbsoluteSize.X, 0, 500)
+        HacksFrame.Visible = true
+        ModesFrame.Visible = true
+        ScriptBoxFrame.Visible = true
+        ButtonContainer.Visible = true
+    end
+end
+
+MinimizeBtn.MouseButton1Click:Connect(function() SetMinimized(true) end)
+ExpandBtn.MouseButton1Click:Connect(function() SetMinimized(false) end)
+
+local function CreateActionButton(name, text, posScale, color)
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.new(0.315, 0, 1, 0)
+    btn.Position = UDim2.new(posScale, 0, 0, 0)
+    btn.BackgroundColor3 = color
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.Parent = ButtonContainer
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
+end
+
+local CopyBtn = CreateActionButton("CopyBtn", "COPY", 0, Color3.fromRGB(45, 52, 68))
+local ClearBtn = CreateActionButton("ClearBtn", "CLEAR", 0.342, Color3.fromRGB(180, 55, 65))
+local ExecuteBtn = CreateActionButton("ExecuteBtn", "EXECUTE", 0.685, Color3.fromRGB(40, 165, 95))
+
+-- Hacks: Speed 100, JumpPower 300, TP Tool, Salto Infinito, Noclip
+local speedOn, jumpOn, infJumpOn, noclipOn = false, false, false, false
+local originalCollision = {}
+
+local function GetHumanoid()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChildWhichIsA("Humanoid")
+end
+
+SpeedBtn.MouseButton1Click:Connect(function()
+    speedOn = not speedOn
+    SpeedBtn.Text = speedOn and "Speed 100: ON" or "Speed 100: OFF"
+    SpeedBtn.BackgroundColor3 = speedOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(50, 56, 72)
+    local hum = GetHumanoid()
+    if hum then hum.WalkSpeed = speedOn and 100 or 16 end
+end)
+
+JumpBtn.MouseButton1Click:Connect(function()
+    jumpOn = not jumpOn
+    JumpBtn.Text = jumpOn and "JumpPower 300: ON" or "JumpPower 300: OFF"
+    JumpBtn.BackgroundColor3 = jumpOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(50, 56, 72)
+    local hum = GetHumanoid()
+    if hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = jumpOn and 300 or 50
+    end
+end)
+
+TPToolBtn.MouseButton1Click:Connect(function()
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if not backpack or backpack:FindFirstChild("DeltaTPTool") then return end
+    local tool = Instance.new("Tool")
+    tool.Name = "DeltaTPTool"
+    tool.RequiresHandle = false
+    tool.Activated:Connect(function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root and Mouse.Hit then
+            root.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+    tool.Parent = backpack
+end)
+
+InfJumpBtn.MouseButton1Click:Connect(function()
+    infJumpOn = not infJumpOn
+    InfJumpBtn.Text = infJumpOn and "Salto Infinito: ON" or "Salto Infinito: OFF"
+    InfJumpBtn.BackgroundColor3 = infJumpOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(50, 56, 72)
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if infJumpOn then
+        local hum = GetHumanoid()
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+local function RestoreNoclip()
+    local char = LocalPlayer.Character
+    if char then
+        for part, wasCanCollide in pairs(originalCollision) do
+            if part and part.Parent then part.CanCollide = wasCanCollide end
+        end
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BasePart") and originalCollision[obj] == nil then
+                obj.CanCollide = true
+            end
+        end
+    end
+    table.clear(originalCollision)
+end
+
+NoclipBtn.MouseButton1Click:Connect(function()
+    noclipOn = not noclipOn
+    NoclipBtn.Text = noclipOn and "Noclip: ON" or "Noclip: OFF"
+    NoclipBtn.BackgroundColor3 = noclipOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(50, 56, 72)
+    if not noclipOn then RestoreNoclip() end
+end)
+
+RunService.Stepped:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if hum then
+        if speedOn then hum.WalkSpeed = 100 end
+        if jumpOn then
+            hum.UseJumpPower = true
+            hum.JumpPower = 300
+        end
+    end
+    if noclipOn then
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                if originalCollision[obj] == nil then originalCollision[obj] = obj.CanCollide end
+                obj.CanCollide = false
+            end
+        end
+    end
+end)
+
+_G.DeltaUI = {
+    SelectModeBtn = SelectModeBtn,
+    AutoFarmToggle = AutoFarmToggle,
+    DelayBox = DelayBox,
+    InstantStealToggle = InstantStealToggle,
+    CodeBox = CodeBox,
+    CopyBtn = CopyBtn,
+    ClearBtn = ClearBtn,
+    ExecuteBtn = ExecuteBtn
+}
+-- PARTE 2: Lógica de ProximityPrompt, Auto Farm, Instant Steal, Modificador Server y Portapapeles Completo
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ProximityService = game:GetService("ProximityPromptService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local UI = _G.DeltaUI
+
+local SelectModeBtn = UI.SelectModeBtn
+local AutoFarmToggle = UI.AutoFarmToggle
+local DelayBox = UI.DelayBox
+local InstantStealToggle = UI.InstantStealToggle
+local CodeBox = UI.CodeBox
+local CopyBtn = UI.CopyBtn
+local ClearBtn = UI.ClearBtn
+local ExecuteBtn = UI.ExecuteBtn
+
+local currentFullScript = ""
+local typeToken = 0
+
+local function TypeWriteScript(fullText)
+    currentFullScript = fullText or ""
+    typeToken += 1
+    local token = typeToken
+    CodeBox.Text = ""
+    task.spawn(function()
+        for i = 1, #currentFullScript do
+            if typeToken ~= token then return end
+            CodeBox.Text = string.sub(currentFullScript, 1, i)
+            task.wait(0.008)
+        end
+    end)
+end
+
+local function SetInstantScript(fullText)
+    typeToken += 1
+    currentFullScript = fullText or ""
+    CodeBox.Text = currentFullScript
+end
+
+local function GetFullPath(inst)
+    if not inst then return "nil" end
+    local path = ""
+    local current = inst
+    while current and current ~= game do
+        local name = current.Name
+        if name:match("^[%a_][%w_]*$") then
+            path = "." .. name .. path
+        else
+            path = string.format("[%q]", name) .. path
+        end
+        current = current.Parent
+    end
+    return "game" .. path
+end
+
+local function SerializeArgs(args)
+    local serialized = {}
+    for _, v in ipairs(args) do
+        local t = typeof(v)
+        if t == "string" then
+            table.insert(serialized, string.format("%q", v))
+        elseif t == "number" or t == "boolean" then
+            table.insert(serialized, tostring(v))
+        elseif t == "Instance" then
+            table.insert(serialized, GetFullPath(v))
+        elseif t == "Vector3" then
+            table.insert(serialized, string.format("Vector3.new(%s, %s, %s)", v.X, v.Y, v.Z))
+        elseif t == "CFrame" then
+            table.insert(serialized, string.format("CFrame.new(%s)", tostring(v)))
+        elseif t == "table" then
+            table.insert(serialized, "{}")
+        else
+            table.insert(serialized, "nil")
+        end
+    end
+    return table.concat(serialized, ", ")
+end
+
+local function GetDelayValue()
+    local num = tonumber(DelayBox.Text)
+    return (num and num >= 0) and num or 0.6
+end
+
+local autoFarmOn = false
+local instantStealOn = false
+local lastMiniScript = ""
+local lastPromptName = nil
+local lastPromptParentPath = nil
+local lastPromptPath = nil
+local lastActionKind = nil
+local lastRemoteMethod = nil
+local lastRemoteArgsStr = ""
+
+local function BuildAutoFarmScript(delaySec)
+    if lastActionKind == "Prompt" and lastPromptPath then
+        return string.format("local delayTime = %s\nwhile task.wait(delayTime) do\n    local p = %s\n    if p and p:IsA('ProximityPrompt') and fireproximityprompt then\n        fireproximityprompt(p)\n    end\nend", tostring(delaySec), lastPromptPath)
+    elseif lastActionKind == "Click" and lastPromptPath then
+        return string.format("local delayTime = %s\nwhile task.wait(delayTime) do\n    local c = %s\n    if c and c:IsA('ClickDetector') and fireclickdetector then\n        fireclickdetector(c)\n    end\nend", tostring(delaySec), lastPromptPath)
+    elseif lastActionKind == "Remote" and lastPromptPath and lastRemoteMethod then
+        return string.format("local delayTime = %s\nwhile task.wait(delayTime) do\n    local r = %s\n    if r then\n        r:%s(%s)\n    end\nend", tostring(delaySec), lastPromptPath, lastRemoteMethod, lastRemoteArgsStr)
+    elseif lastMiniScript ~= "" then
+        return string.format("local delayTime = %s\nwhile task.wait(delayTime) do\n%s\nend", tostring(delaySec), lastMiniScript)
+    end
+    return string.format("local delayTime = %s\nwhile task.wait(delayTime) do\n    -- Toca un objeto, pantalla o ProximityPrompt\nend", tostring(delaySec))
+end
+
+local function BuildInstantStealScript()
+    local targetName = lastPromptName or ""
+    local parentPath = lastPromptParentPath or "workspace"
+    local promptPath = lastPromptPath or "nil"
+    return string.format("local targetName = %q\nlocal parentRef = %s\nlocal directPrompt = %s\nlocal function grabPrompt(pr)\n    if pr and pr:IsA('ProximityPrompt') and fireproximityprompt then\n        fireproximityprompt(pr)\n    end\nend\nif directPrompt and directPrompt:IsA('ProximityPrompt') then\n    grabPrompt(directPrompt)\nend\nfor _, d in ipairs(workspace:GetDescendants()) do\n    if d:IsA('ProximityPrompt') and (d.Name == targetName or d:GetFullName() == directPrompt) then\n        grabPrompt(d)\n    end\nend\nworkspace.DescendantAdded:Connect(function(d)\n    if d:IsA('ProximityPrompt') and (targetName == '' or d.Name == targetName) then\n        task.wait()\n        grabPrompt(d)\n    end\nend)", targetName, parentPath, promptPath)
+end
+
+task.spawn(function()
+    while true do
+        local d = GetDelayValue()
+        if autoFarmOn then
+            if lastActionKind == "Prompt" and lastPromptPath then
+                local fn = loadstring(string.format("local p = %s; if p and fireproximityprompt then fireproximityprompt(p) end", lastPromptPath))
+                if fn then task.spawn(fn) end
+            elseif lastActionKind == "Click" and lastPromptPath then
+                local fn = loadstring(string.format("local c = %s; if c and fireclickdetector then fireclickdetector(c) end", lastPromptPath))
+                if fn then task.spawn(fn) end
+            elseif lastActionKind == "Remote" and lastPromptPath and lastRemoteMethod then
+                local fn = loadstring(string.format("local r = %s; if r then r:%s(%s) end", lastPromptPath, lastRemoteMethod, lastRemoteArgsStr))
+                if fn then task.spawn(fn) end
+            elseif lastMiniScript ~= "" then
+                local fn = loadstring(lastMiniScript)
+                if fn then task.spawn(fn) end
+            end
+        end
+        task.wait(d)
+    end
+end)
+
+local function TryStealPrompt(prompt)
+    if not instantStealOn or not prompt or not prompt:IsA("ProximityPrompt") then return end
+    local matchesName = (lastPromptName ~= nil and prompt.Name == lastPromptName)
+    local matchesPath = (lastPromptPath ~= nil and GetFullPath(prompt) == lastPromptPath)
+    if matchesName or matchesPath or (lastPromptName == nil and lastPromptPath == nil) then
+        if fireproximityprompt then fireproximityprompt(prompt) end
+    end
+end
+
+Workspace.DescendantAdded:Connect(function(desc)
+    if instantStealOn and desc:IsA("ProximityPrompt") then
+        task.wait()
+        TryStealPrompt(desc)
+    end
+end)
+
+AutoFarmToggle.MouseButton1Click:Connect(function()
+    autoFarmOn = not autoFarmOn
+    AutoFarmToggle.Text = autoFarmOn and "Auto Farm: ON" or "Auto Farm: OFF"
+    AutoFarmToggle.BackgroundColor3 = autoFarmOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(55, 62, 80)
+    if autoFarmOn then
+        TypeWriteScript(BuildAutoFarmScript(GetDelayValue()))
+    end
+end)
+
+InstantStealToggle.MouseButton1Click:Connect(function()
+    instantStealOn = not instantStealOn
+    InstantStealToggle.Text = instantStealOn and "Instant Steal: ON" or "Instant Steal: OFF"
+    InstantStealToggle.BackgroundColor3 = instantStealOn and Color3.fromRGB(40, 165, 95) or Color3.fromRGB(55, 62, 80)
+    if instantStealOn then
+        TypeWriteScript(BuildInstantStealScript())
+        for _, d in ipairs(Workspace:GetDescendants()) do
+            if d:IsA("ProximityPrompt") then TryStealPrompt(d) end
+        end
+    end
+end)
+
+local function RecordPrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+    lastPromptName = prompt.Name
+    lastPromptParentPath = GetFullPath(prompt.Parent)
+    lastPromptPath = GetFullPath(prompt)
+    lastActionKind = "Prompt"
+    lastMiniScript = string.format("fireproximityprompt(%s)", lastPromptPath)
+    if not autoFarmOn and not instantStealOn then
+        SetInstantScript(lastMiniScript)
+    elseif autoFarmOn then
+        TypeWriteScript(BuildAutoFarmScript(GetDelayValue()))
+    elseif instantStealOn then
+        TypeWriteScript(BuildInstantStealScript())
+    end
+end
+
+ProximityService.PromptTriggered:Connect(function(prompt, player)
+    if player == LocalPlayer and prompt then RecordPrompt(prompt) end
+end)
+
+local function HookPrompt(prompt)
+    if prompt:IsA("ProximityPrompt") then
+        local cachedName = prompt.Name
+        local cachedParentPath = GetFullPath(prompt.Parent)
+        local cachedPath = GetFullPath(prompt)
+        prompt:GetPropertyChangedSignal("Parent"):Connect(function()
+            if prompt.Parent == nil then
+                cachedName = prompt.Name
+                cachedPath = GetFullPath(prompt)
+            else
+                cachedParentPath = GetFullPath(prompt.Parent)
+                cachedPath = GetFullPath(prompt)
+            end
+        end)
+        prompt.Triggered:Connect(function(player)
+            if player == LocalPlayer then
+                lastPromptName = cachedName
+                lastPromptParentPath = cachedParentPath
+                lastPromptPath = cachedPath
+                lastActionKind = "Prompt"
+                lastMiniScript = string.format("fireproximityprompt(%s)", cachedPath)
+                if not autoFarmOn and not instantStealOn then
+                    SetInstantScript(lastMiniScript)
+                elseif autoFarmOn then
+                    TypeWriteScript(BuildAutoFarmScript(GetDelayValue()))
+                elseif instantStealOn then
+                    TypeWriteScript(BuildInstantStealScript())
+                end
+            end
+        end)
+    end
+end
+
+for _, v in ipairs(game:GetDescendants()) do HookPrompt(v) end
+game.DescendantAdded:Connect(HookPrompt)
+
+local selectorActive = false
+local highlight = Instance.new("Highlight")
+highlight.FillColor = Color3.fromRGB(0, 170, 255)
+highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+highlight.FillTransparency = 0.6
+
+SelectModeBtn.MouseButton1Click:Connect(function()
+    selectorActive = not selectorActive
+    SelectModeBtn.Text = selectorActive and "Selector: ON" or "Selector: OFF"
+    SelectModeBtn.BackgroundColor3 = selectorActive and Color3.fromRGB(40, 175, 100) or Color3.fromRGB(45, 110, 220)
+    if not selectorActive then highlight.Parent = nil end
+end)
+
+local function FindTargetAction(target)
+    if not target then return nil, nil end
+    for _, obj in ipairs({target, target.Parent}) do
+        if obj and obj ~= Workspace and obj ~= game then
+            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then return prompt, "ProximityPrompt" end
+            local click = obj:FindFirstChildWhichIsA("ClickDetector", true)
+            if click then return click, "ClickDetector" end
+            local remote = obj:FindFirstChildWhichIsA("RemoteEvent", true) or obj:FindFirstChildWhichIsA("RemoteFunction", true)
+            if remote then return remote, remote.ClassName end
+        end
+    end
+    if target:IsA("BasePart") or (target.Parent and target.Parent:IsA("Model")) then
+        return (target.Parent and target.Parent:IsA("Model") and target.Parent) or target, "ServerMod"
+    end
+    return nil, nil
+end
+
+RunService.RenderStepped:Connect(function()
+    if not selectorActive then return end
+    local found, _ = FindTargetAction(Mouse.Target)
+    if found then
+        highlight.Parent = found:IsA("BasePart") and found or found:FindFirstChildWhichIsA("BasePart", true)
+    else
+        highlight.Parent = nil
+    end
+end)
+
+Mouse.Button1Down:Connect(function()
+    if not selectorActive then return end
+    local found, kind = FindTargetAction(Mouse.Target)
+    if found then
+        local path = GetFullPath(found)
+        if kind == "ProximityPrompt" then
+            RecordPrompt(found)
+        elseif kind == "ClickDetector" then
+            lastPromptPath, lastActionKind = path, "Click"
+            lastMiniScript = string.format("fireclickdetector(%s)", path)
+            SetInstantScript(autoFarmOn and BuildAutoFarmScript(GetDelayValue()) or lastMiniScript)
+        elseif kind == "RemoteEvent" then
+            lastPromptPath, lastActionKind, lastRemoteMethod, lastRemoteArgsStr = path, "Remote", "FireServer", ""
+            lastMiniScript = string.format("%s:FireServer()", path)
+            SetInstantScript(autoFarmOn and BuildAutoFarmScript(GetDelayValue()) or lastMiniScript)
+        elseif kind == "RemoteFunction" then
+            lastPromptPath, lastActionKind, lastRemoteMethod, lastRemoteArgsStr = path, "Remote", "InvokeServer", ""
+            lastMiniScript = string.format("%s:InvokeServer()", path)
+            SetInstantScript(autoFarmOn and BuildAutoFarmScript(GetDelayValue()) or lastMiniScript)
+        elseif kind == "ServerMod" then
+            lastPromptPath, lastActionKind = path, "Part"
+            lastMiniScript = string.format("local obj = %s\nfor _, p in ipairs(obj:IsA('BasePart') and {obj} or obj:GetDescendants()) do\n    if p:IsA('BasePart') then\n        p.Anchored = false\n        if sethiddenproperty then sethiddenproperty(p, 'NetworkIsSleeping', false) end\n        p.CFrame = p.CFrame + Vector3.new(0, 10, 0)\n    end\nend", path)
+            SetInstantScript(autoFarmOn and BuildAutoFarmScript(GetDelayValue()) or lastMiniScript)
+        end
+        selectorActive = false
+        SelectModeBtn.Text = "Selector: OFF"
+        SelectModeBtn.BackgroundColor3 = Color3.fromRGB(45, 110, 220)
+        highlight.Parent = nil
+    end
+end)
+
+local BlockedRemotes, ExcludedRemotes, HookedCallbacks = {}, {}, {}
+local SimpleSpy = {}
+function SimpleSpy:HookRemote(remote, callback) HookedCallbacks[remote] = callback end
+function SimpleSpy:BlockRemote(remote) BlockedRemotes[remote] = true end
+function SimpleSpy:ExcludeRemote(remote) ExcludedRemotes[remote] = true end
+
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local oldNamecall = mt.__namecall
+mt.__namecall = function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if method == "FireServer" or method == "InvokeServer" then
+        if BlockedRemotes[self] then return nil end
+        if HookedCallbacks[self] then
+            local modified = HookedCallbacks[self](...)
+            if modified == nil then return nil end
+            args = modified
+        end
+        if not ExcludedRemotes[self] then
+            local remotePath = GetFullPath(self)
+            local argsStr = SerializeArgs(args)
+            task.spawn(function()
+                lastPromptPath, lastActionKind, lastRemoteMethod, lastRemoteArgsStr = remotePath, "Remote", method, argsStr
+                lastMiniScript = string.format("%s:%s(%s)", remotePath, method, argsStr)
+                if not autoFarmOn and not instantStealOn then
+                    SetInstantScript(lastMiniScript)
+                elseif autoFarmOn then
+                    SetInstantScript(BuildAutoFarmScript(GetDelayValue()))
+                end
+            end)
+        end
+        return oldNamecall(self, unpack(args))
+    end
+    return oldNamecall(self, ...)
+end
+setreadonly(mt, true)
+
+local function CopyFullToClipboard(text)
+    local toCopy = text or ""
+    if setclipboard then setclipboard(toCopy)
+    elseif toClipboard then toClipboard(toCopy)
+    elseif syn and syn.write_clipboard then syn.write_clipboard(toCopy) end
+end
+
+CopyBtn.MouseButton1Click:Connect(function()
+    local payload = (currentFullScript ~= "" and #currentFullScript >= #CodeBox.Text) and currentFullScript or CodeBox.Text
+    CopyFullToClipboard(payload)
+    CopyBtn.Text = "COPIED!"
+    task.wait(1)
+    CopyBtn.Text = "COPY"
+end)
+
+ClearBtn.MouseButton1Click:Connect(function()
+    typeToken += 1
+    currentFullScript = ""
+    CodeBox.Text = ""
+end)
+
+ExecuteBtn.MouseButton1Click:Connect(function()
+    local src = (currentFullScript ~= "" and #currentFullScript >= #CodeBox.Text) and currentFullScript or CodeBox.Text
+    if src and src ~= "" then
+        local fn = loadstring(src)
+        if fn then
+            task.spawn(fn)
+            ExecuteBtn.Text = "EXECUTED!"
+            task.wait(1)
+            ExecuteBtn.Text = "EXECUTE"
+        end
+    end
+end)
