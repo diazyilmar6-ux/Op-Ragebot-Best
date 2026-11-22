@@ -1,0 +1,280 @@
+local Players=cloneref and cloneref(game:GetService("Players"))or game:GetService("Players")
+local RunService=cloneref and cloneref(game:GetService("RunService"))or game:GetService("RunService")
+local UserInputService=cloneref and cloneref(game:GetService("UserInputService"))or game:GetService("UserInputService")
+local CoreGui=cloneref and cloneref(game:GetService("CoreGui"))or game:GetService("CoreGui")
+local LocalPlayer=Players.LocalPlayer
+
+local function getGuiParent()
+	local ok,hui=pcall(function()return gethui and gethui()end)
+	if ok and hui then return hui end
+	local okC,c=pcall(function()return CoreGui end)
+	if okC and c and LocalPlayer then
+		if pcall(function()local f=Instance.new("Folder")f.Parent=c f:Destroy()end)then return c end
+	end
+	return LocalPlayer and LocalPlayer:WaitForChild("PlayerGui")or game:GetService("StarterGui")
+end
+
+local ParentTarget=getGuiParent()
+if ParentTarget:FindFirstChild("RSPYV_MainGui")then ParentTarget.RSPYV_MainGui:Destroy()end
+
+local State={Paused=false,SearchQuery="",ActiveTab="Remotes",SelectedRemote=nil,Logs={},SpeedEnabled=false,JumpEnabled=false,InfiniteJumpEnabled=false,NoclipEnabled=false,InvisibleEnabled=false,EspEnabled=false,TpToolEnabled=false}
+
+local function ser(v,d,vis)
+	d=d or 0;vis=vis or{};local t=typeof(v)
+	if t=="string"then return string.format("%q",v)
+	elseif t=="number"or t=="boolean"or t=="nil"then return tostring(v)
+	elseif t=="Vector3"then return string.format("Vector3.new(%.2f,%.2f,%.2f)",v.X,v.Y,v.Z)
+	elseif t=="Vector2"then return string.format("Vector2.new(%.2f,%.2f)",v.X,v.Y)
+	elseif t=="CFrame"then return string.format("CFrame.new(%.2f,%.2f,%.2f)",v.Position.X,v.Position.Y,v.Position.Z)
+	elseif t=="Color3"then return string.format("Color3.fromRGB(%d,%d,%d)",math.round(v.R*255),math.round(v.G*255),math.round(v.B*255))
+	elseif t=="UDim2"then return string.format("UDim2.new(%.2f,%d,%.2f,%d)",v.X.Scale,v.X.Offset,v.Y.Scale,v.Y.Offset)
+	elseif t=="Instance"then local ok,fn=pcall(function()return v:GetFullName()end);return"Instance("..(ok and fn or tostring(v))..")"
+	elseif t=="table"then
+		if d>=3 then return"{...}"end
+		if vis[v]then return"{<circular>}"end
+		vis[v]=true;local out,n={},0
+		for k,val in pairs(v)do
+			n+=1;if n>15 then table.insert(out,"...");break end
+			local ks=(type(k)=="string")and("["..string.format("%q",k).."]")or("["..tostring(k).."]")
+			table.insert(out,ks.."="..ser(val,d+1,vis))
+		end
+		vis[v]=nil;return"{"..table.concat(out,", ").."}"
+	end
+	return t.."("..tostring(v)..")"
+end
+
+local function fmtArgs(args)
+	if#args==0 then return""end
+	local r={};for i=1,#args do r[i]=string.format("[%d] %s",i,ser(args[i],0,{}))end
+	return table.concat(r,"\n")
+end
+
+local C={Bg=Color3.fromHex("#1e1e2e"),Panel=Color3.fromHex("#252538"),Card=Color3.fromHex("#2e2e44"),Accent=Color3.fromHex("#89b4fa"),Text=Color3.fromHex("#cdd6f4"),Sub=Color3.fromHex("#a6adc8"),Ok=Color3.fromHex("#a6e3a1"),Warn=Color3.fromHex("#f9e2af"),Bdr=Color3.fromHex("#3b3b56")}
+local DEF_SZ,MIN_SZ,MAX_SZ,BAR_H=UDim2.fromOffset(300,400),Vector2.new(250,240),Vector2.new(520,620),36
+
+local Gui=Instance.new("ScreenGui");Gui.Name="RSPYV_MainGui";Gui.ResetOnSpawn=false;Gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling;Gui.DisplayOrder=999;Gui.Parent=ParentTarget
+local Main=Instance.new("Frame");Main.Size=DEF_SZ;Main.Position=UDim2.new(0.5,-150,0.5,-200);Main.BackgroundColor3=C.Bg;Main.BorderSizePixel=0;Main.Active=true;Main.Parent=Gui
+Instance.new("UICorner",Main).CornerRadius=UDim.new(0,10)
+local st=Instance.new("UIStroke",Main);st.Color=C.Bdr;st.Thickness=1
+
+local Top=Instance.new("Frame");Top.Size=UDim2.new(1,0,0,BAR_H);Top.BackgroundColor3=C.Panel;Top.BorderSizePixel=0;Top.Parent=Main
+Instance.new("UICorner",Top).CornerRadius=UDim.new(0,10)
+local TF=Instance.new("Frame");TF.Size=UDim2.new(1,0,0,10);TF.Position=UDim2.new(0,0,1,-10);TF.BackgroundColor3=C.Panel;TF.BorderSizePixel=0;TF.Parent=Top
+
+local Title=Instance.new("TextLabel");Title.Size=UDim2.new(1,-90,1,0);Title.Position=UDim2.new(0,10,0,0);Title.BackgroundTransparency=1;Title.Font=Enum.Font.GothamBold;Title.TextSize=14;Title.TextColor3=C.Accent;Title.TextXAlignment=Enum.TextXAlignment.Left;Title.Text="RSPYV";Title.Parent=Top
+
+local function topBtn(txt,ox,col)
+	local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(26,26);b.Position=UDim2.new(1,ox,0.5,-13);b.BackgroundColor3=C.Card;b.Font=Enum.Font.GothamBold;b.TextSize=14;b.TextColor3=col;b.Text=txt;b.Parent=Top
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,6);return b
+end
+local MinB=topBtn("-",-60,Color3.fromRGB(255,255,255))
+local ExpB=topBtn("□",-30,C.Text)
+
+local Body=Instance.new("Frame");Body.Size=UDim2.new(1,0,1,-BAR_H);Body.Position=UDim2.new(0,0,0,BAR_H);Body.BackgroundTransparency=1;Body.ClipsDescendants=true;Body.Parent=Main
+
+local TabBar=Instance.new("Frame");TabBar.Size=UDim2.new(1,-12,0,28);TabBar.Position=UDim2.new(0,6,0,6);TabBar.BackgroundColor3=C.Panel;TabBar.Parent=Body
+Instance.new("UICorner",TabBar).CornerRadius=UDim.new(0,6)
+
+local function tabBtn(txt,xs,ox)
+	local b=Instance.new("TextButton");b.Size=UDim2.new(0.5,-3,1,-4);b.Position=UDim2.new(xs,ox,0,2);b.Font=Enum.Font.GothamBold;b.TextSize=11;b.Text=txt;b.Parent=TabBar
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,5);return b
+end
+local RemTab=tabBtn("Remotes",0,2)
+local UtlTab=tabBtn("Utilidades",0.5,1)
+
+local RemPage=Instance.new("Frame");RemPage.Size=UDim2.new(1,-12,1,-40);RemPage.Position=UDim2.new(0,6,0,38);RemPage.BackgroundTransparency=1;RemPage.Parent=Body
+
+local ActBar=Instance.new("Frame");ActBar.Size=UDim2.new(1,0,0,28);ActBar.BackgroundTransparency=1;ActBar.Parent=RemPage
+local Search=Instance.new("TextBox");Search.Size=UDim2.new(1,-96,1,0);Search.BackgroundColor3=C.Card;Search.Font=Enum.Font.Gotham;Search.TextSize=11;Search.TextColor3=C.Text;Search.PlaceholderColor3=C.Sub;Search.PlaceholderText="🔍 Buscar...";Search.ClearTextOnFocus=false;Search.Text="";Search.Parent=ActBar
+Instance.new("UICorner",Search).CornerRadius=UDim.new(0,6)
+
+local function toolB(txt,ox)
+	local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(28,28);b.Position=UDim2.new(1,ox,0,0);b.BackgroundColor3=C.Card;b.Font=Enum.Font.GothamBold;b.TextSize=13;b.TextColor3=C.Text;b.Text=txt;b.Parent=ActBar
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,6);return b
+end
+local ClrB,PauB,ExpRB=toolB("🗑️",-90),toolB("⏸️",-60),toolB("📤",-30)
+
+local ColH=Instance.new("Frame");ColH.Size=UDim2.new(1,0,0,20);ColH.Position=UDim2.new(0,0,0,32);ColH.BackgroundColor3=C.Panel;ColH.Parent=RemPage
+Instance.new("UICorner",ColH).CornerRadius=UDim.new(0,4)
+for _,c in ipairs({{"Hora",0,0.22,4},{"Tipo",0.22,0.12,0},{"Remoto",0.34,0.33,0},{"Ruta",0.67,0.33,0}})do
+	local l=Instance.new("TextLabel");l.Size=UDim2.new(c[3],0,1,0);l.Position=UDim2.new(c[2],c[4],0,0);l.BackgroundTransparency=1;l.Font=Enum.Font.GothamBold;l.TextSize=10;l.TextColor3=C.Sub;l.TextXAlignment=Enum.TextXAlignment.Left;l.Text=c[1];l.Parent=ColH
+end
+
+local LogList=Instance.new("ScrollingFrame");LogList.Size=UDim2.new(1,0,0.52,-28);LogList.Position=UDim2.new(0,0,0,54);LogList.BackgroundColor3=C.Panel;LogList.ScrollBarThickness=3;LogList.ScrollBarImageColor3=C.Accent;LogList.CanvasSize=UDim2.new(0,0,0,0);LogList.Parent=RemPage
+Instance.new("UICorner",LogList).CornerRadius=UDim.new(0,6)
+local LogLay=Instance.new("UIListLayout",LogList);LogLay.SortOrder=Enum.SortOrder.LayoutOrder;LogLay.Padding=UDim.new(0,3)
+LogLay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()LogList.CanvasSize=UDim2.new(0,0,0,LogLay.AbsoluteContentSize.Y+6)end)
+
+local DetP=Instance.new("Frame");DetP.Size=UDim2.new(1,0,0.48,-28);DetP.Position=UDim2.new(0,0,0.52,28);DetP.BackgroundColor3=C.Panel;DetP.Parent=RemPage
+Instance.new("UICorner",DetP).CornerRadius=UDim.new(0,6)
+
+local DetT=Instance.new("TextLabel");DetT.Size=UDim2.new(1,-76,0,22);DetT.Position=UDim2.new(0,8,0,4);DetT.BackgroundTransparency=1;DetT.Font=Enum.Font.GothamBold;DetT.TextSize=11;DetT.TextColor3=C.Accent;DetT.TextXAlignment=Enum.TextXAlignment.Left;DetT.TextTruncate=Enum.TextTruncate.AtEnd;DetT.Text="Selecciona un remoto";DetT.Parent=DetP
+
+local function dBtn(txt,ox,col)
+	local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(30,22);b.Position=UDim2.new(1,ox,0,4);b.BackgroundColor3=C.Card;b.Font=Enum.Font.GothamBold;b.TextSize=12;b.TextColor3=col;b.Text=txt;b.Parent=DetP
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,5);return b
+end
+local RepB,CopB=dBtn("⚡",-68,C.Ok),dBtn("📋",-34,C.Accent)
+
+local DetS=Instance.new("ScrollingFrame");DetS.Size=UDim2.new(1,-12,1,-32);DetS.Position=UDim2.new(0,6,0,28);DetS.BackgroundColor3=C.Card;DetS.ScrollBarThickness=3;DetS.ScrollBarImageColor3=C.Accent;DetS.CanvasSize=UDim2.new(0,0,0,0);DetS.Parent=DetP
+Instance.new("UICorner",DetS).CornerRadius=UDim.new(0,5)
+local DetTxt=Instance.new("TextLabel");DetTxt.Size=UDim2.new(1,-10,0,0);DetTxt.Position=UDim2.new(0,5,0,4);DetTxt.BackgroundTransparency=1;DetTxt.Font=Enum.Font.Code;DetTxt.TextSize=10;DetTxt.TextColor3=C.Text;DetTxt.TextXAlignment=Enum.TextXAlignment.Left;DetTxt.TextYAlignment=Enum.TextYAlignment.Top;DetTxt.TextWrapped=true;DetTxt.AutomaticSize=Enum.AutomaticSize.Y;DetTxt.Text="Toca un remoto para ver detalles.";DetTxt.Parent=DetS
+DetTxt:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()DetS.CanvasSize=UDim2.new(0,0,0,DetTxt.AbsoluteSize.Y+10)end)
+
+local UtlPage=Instance.new("ScrollingFrame");UtlPage.Size=UDim2.new(1,-12,1,-40);UtlPage.Position=UDim2.new(0,6,0,38);UtlPage.BackgroundTransparency=1;UtlPage.ScrollBarThickness=3;UtlPage.ScrollBarImageColor3=C.Accent;UtlPage.Visible=false;UtlPage.Parent=Body
+local UtlLay=Instance.new("UIListLayout",UtlPage);UtlLay.SortOrder=Enum.SortOrder.LayoutOrder;UtlLay.Padding=UDim.new(0,6)
+UtlLay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()UtlPage.CanvasSize=UDim2.new(0,0,0,UtlLay.AbsoluteContentSize.Y+8)end)
+
+local function makeToggle(t,sub,ord,cb)
+	local f=Instance.new("Frame");f.Size=UDim2.new(1,0,0,44);f.LayoutOrder=ord;f.BackgroundColor3=C.Panel;f.Parent=UtlPage
+	Instance.new("UICorner",f).CornerRadius=UDim.new(0,7)
+	local l=Instance.new("TextLabel");l.Size=UDim2.new(1,-74,0,18);l.Position=UDim2.new(0,8,0,4);l.BackgroundTransparency=1;l.Font=Enum.Font.GothamBold;l.TextSize=12;l.TextColor3=C.Text;l.TextXAlignment=Enum.TextXAlignment.Left;l.Text=t;l.Parent=f
+	local s=Instance.new("TextLabel");s.Size=UDim2.new(1,-74,0,14);s.Position=UDim2.new(0,8,0,23);s.BackgroundTransparency=1;s.Font=Enum.Font.Gotham;s.TextSize=10;s.TextColor3=C.Sub;s.TextXAlignment=Enum.TextXAlignment.Left;s.TextTruncate=Enum.TextTruncate.AtEnd;s.Text=sub;s.Parent=f
+	local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(56,26);b.Position=UDim2.new(1,-64,0.5,-13);b.BackgroundColor3=C.Card;b.Font=Enum.Font.GothamBold;b.TextSize=11;b.TextColor3=C.Sub;b.Text="OFF";b.Parent=f
+	Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
+	local on=false
+	b.MouseButton1Click:Connect(function()
+		on=not on;b.Text=on and"ON"or"OFF";b.BackgroundColor3=on and C.Accent or C.Card;b.TextColor3=on and C.Bg or C.Sub
+		pcall(cb,on)
+	end)
+end
+
+local ResH=Instance.new("TextButton");ResH.Size=UDim2.fromOffset(18,18);ResH.Position=UDim2.new(1,-18,1,-18);ResH.BackgroundTransparency=1;ResH.Font=Enum.Font.GothamBold;ResH.TextSize=12;ResH.TextColor3=C.Sub;ResH.Text="⤡";ResH.Parent=Main
+
+local minF,expF,savSz,savPos=false,false,DEF_SZ,Main.Position
+local drag,dStart,sPos=false,nil,nil
+local res,rStart,iSz=false,nil,nil
+
+Top.InputBegan:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=true;dStart=i.Position;sPos=Main.Position end end)
+ResH.InputBegan:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then res=true;rStart=i.Position;iSz=Main.AbsoluteSize end end)
+UserInputService.InputChanged:Connect(function(i)
+	if i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch then
+		if drag then local d=i.Position-dStart;Main.Position=UDim2.new(sPos.X.Scale,sPos.X.Offset+d.X,sPos.Y.Scale,sPos.Y.Offset+d.Y)end
+		if res then local d=i.Position-rStart;Main.Size=UDim2.fromOffset(math.clamp(iSz.X+d.X,MIN_SZ.X,MAX_SZ.X),math.clamp(iSz.Y+d.Y,MIN_SZ.Y,MAX_SZ.Y))end
+	end
+end)
+UserInputService.InputEnded:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=false;res=false end end)
+
+MinB.MouseButton1Click:Connect(function()
+	minF=not minF
+	if minF then if not expF then savSz=Main.Size end;Body.Visible=false;ResH.Visible=false;Main.Size=UDim2.new(0,Main.Size.X.Offset,0,BAR_H)
+	else Body.Visible=true;ResH.Visible=not expF;Main.Size=expF and UDim2.fromOffset(420,480)or savSz end
+end)
+ExpB.MouseButton1Click:Connect(function()
+	if minF then minF=false;Body.Visible=true end;expF=not expF
+	if expF then savSz=Main.Size;savPos=Main.Position;Main.Size=UDim2.fromOffset(420,480);ResH.Visible=false
+	else Main.Size=savSz;Main.Position=savPos;ResH.Visible=true end
+end)
+
+local function setTab(t)
+	State.ActiveTab=t;local r=t=="Remotes";RemPage.Visible=r;UtlPage.Visible=not r
+	RemTab.BackgroundColor3=r and C.Accent or C.Panel;RemTab.TextColor3=r and C.Bg or C.Sub
+	UtlTab.BackgroundColor3=(not r)and C.Accent or C.Panel;UtlTab.TextColor3=(not r)and C.Bg or C.Sub
+end
+RemTab.MouseButton1Click:Connect(function()setTab("Remotes")end)
+UtlTab.MouseButton1Click:Connect(function()setTab("Utils")end)
+
+local function refreshLogs()
+	for _,c in ipairs(LogList:GetChildren())do if c:IsA("TextButton")then c:Destroy()end end
+	local q=string.lower(State.SearchQuery);local idx=0
+	for _,e in ipairs(State.Logs)do
+		if q==""or string.find(string.lower(e.Name),q,1,true)or string.find(string.lower(e.Path),q,1,true)or string.find(string.lower(e.Kind),q,1,true)then
+			idx+=1
+			local row=Instance.new("TextButton");row.Size=UDim2.new(1,-6,0,24);row.LayoutOrder=idx;row.BackgroundColor3=C.Card;row.Text="";row.Parent=LogList
+			Instance.new("UICorner",row).CornerRadius=UDim.new(0,4)
+			for _,col in ipairs({{e.Time,0,0.22,C.Sub},{e.Kind=="Fire"and"🔥"or"📡",0.22,0.12,C.Warn},{e.Name,0.34,0.33,C.Accent},{e.Path,0.67,0.33,C.Sub}})do
+				local l=Instance.new("TextLabel");l.Size=UDim2.new(col[3],-2,1,0);l.Position=UDim2.new(col[2],3,0,0);l.BackgroundTransparency=1;l.Font=Enum.Font.Gotham;l.TextSize=10;l.TextColor3=col[4];l.TextXAlignment=Enum.TextXAlignment.Left;l.TextTruncate=Enum.TextTruncate.AtEnd;l.Text=col[1];l.Parent=row
+			end
+			row.MouseButton1Click:Connect(function()
+				State.SelectedRemote=e;DetT.Text=string.format("[%s] %s",e.Kind,e.Name)
+				local a=fmtArgs(e.Args);DetTxt.Text=string.format("Ruta: %s\nHora: %s\n\nArgumentos:\n%s",e.Path,e.Time,a~=""and a or"(Sin args)")
+			end)
+		end
+	end
+end
+
+local function pushLog(rem,kind,args)
+	if State.Paused or typeof(rem)~="Instance"or not(rem:IsA("RemoteEvent")or rem:IsA("RemoteFunction"))or type(args)~="table"or#args==0 or not rem.Parent then return end
+	local okN,n=pcall(function()return rem.Name end);local okP,p=pcall(function()return rem:GetFullName()end)
+	if not(okN and okP)then return end
+	table.insert(State.Logs,{Remote=rem,Name=n,Path=p,Kind=kind,Args=args,Time=os.date("%H:%M:%S")})
+	if#State.Logs>250 then table.remove(State.Logs,1)end
+	refreshLogs()
+end
+
+RepB.MouseButton1Click:Connect(function()
+	local s=State.SelectedRemote;if not s or typeof(s.Remote)~="Instance"then return end
+	local ok,err=pcall(function()if s.Kind=="Fire"and s.Remote:IsA("RemoteEvent")then s.Remote:FireServer(table.unpack(s.Args))elseif s.Kind=="Invoke"and s.Remote:IsA("RemoteFunction")then s.Remote:InvokeServer(table.unpack(s.Args))end end)
+	DetT.Text=ok and("⚡ Repetido: "..s.Name)or"Error al repetir";if not ok then DetTxt.Text=tostring(err)end
+end)
+
+CopB.MouseButton1Click:Connect(function()
+	local s=State.SelectedRemote;if not s then return end
+	local txt=fmtArgs(s.Args);if txt==""then txt="(Sin args)"end
+	local cb=setclipboard or toclipboard;local ok=cb and pcall(cb,txt)
+	DetT.Text=ok and("📋 Copiado: "..s.Name)or("Sin clipboard: "..s.Name)
+end)
+
+Search:GetPropertyChangedSignal("Text"):Connect(function()State.SearchQuery=Search.Text;refreshLogs()end)
+ClrB.MouseButton1Click:Connect(function()table.clear(State.Logs);State.SelectedRemote=nil;DetT.Text="Selecciona un remoto";DetTxt.Text="Logs limpiados.";refreshLogs()end)
+PauB.MouseButton1Click:Connect(function()State.Paused=not State.Paused;PauB.Text=State.Paused and"▶️"or"⏸️"end)
+ExpRB.MouseButton1Click:Connect(function()
+	local out={};for i,e in ipairs(State.Logs)do table.insert(out,string.format("#%d [%s] (%s) %s | %s\n%s",i,e.Time,e.Kind,e.Name,e.Path,fmtArgs(e.Args)))end
+	local dump=#out>0 and table.concat(out,"\n---\n")or"Sin registros."
+	local cb=setclipboard or toclipboard
+	if cb then pcall(cb,dump);DetT.Text="📤 Exportado al portapapeles" else DetT.Text="📤 Exportado";DetTxt.Text=dump end
+end)
+
+pcall(function()
+	if type(hookmetamethod)=="function"and type(getnamecallmethod)=="function"then
+		local old;old=hookmetamethod(game,"__namecall",function(self,...)
+			local m=getnamecallmethod()
+			if not checkcaller or not checkcaller()then
+				if m=="FireServer"and typeof(self)=="Instance"and self:IsA("RemoteEvent")then local a={...};task.spawn(pcall,pushLog,self,"Fire",a)
+				elseif m=="InvokeServer"and typeof(self)=="Instance"and self:IsA("RemoteFunction")then local a={...};task.spawn(pcall,pushLog,self,"Invoke",a)end
+			end
+			return old(self,...)
+		end)
+	end
+end)
+local function getHum()local c=LocalPlayer and LocalPlayer.Character;return c and c:FindFirstChildOfClass("Humanoid")end
+local tpTool=nil
+local function giveTP()
+	if not LocalPlayer then return end;local bp=LocalPlayer:FindFirstChildOfClass("Backpack");if not bp then return end
+	if tpTool then tpTool:Destroy();tpTool=nil end
+	local t=Instance.new("Tool");t.Name="RSPYV TP Tool";t.RequiresHandle=false;t.Parent=bp
+	t.Activated:Connect(function()pcall(function()
+		local r=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart");local m=LocalPlayer:GetMouse()
+		if r and m and m.Hit then r.CFrame=CFrame.new(m.Hit.Position+Vector3.new(0,3,0))end
+	end)end);tpTool=t
+end
+
+local espF=Instance.new("Folder");espF.Name="RSPYV_ESP";espF.Parent=ParentTarget
+local function isEnemy(p)if p==LocalPlayer then return false end;if LocalPlayer.Team and p.Team then return p.Team~=LocalPlayer.Team end;return true end
+local function updESP()
+	for _,c in ipairs(espF:GetChildren())do c:Destroy()end
+	if not State.EspEnabled then return end
+	for _,p in ipairs(Players:GetPlayers())do
+		if isEnemy(p)and p.Character then pcall(function()
+			local h=Instance.new("Highlight");h.Name="ESP_"..p.Name;h.Adornee=p.Character;h.FillColor=C.Accent;h.OutlineColor=Color3.fromRGB(255,255,255);h.FillTransparency=0.55;h.OutlineTransparency=0.1;h.Parent=espF
+		end)end
+	end
+end
+
+makeToggle("Speed (100)","Humanoid.WalkSpeed = 100",1,function(v)State.SpeedEnabled=v;local h=getHum();if h then h.WalkSpeed=v and 100 or 16 end end)
+makeToggle("Jump (300 + Inf)","JumpPower 300 y salto infinito",2,function(v)State.JumpEnabled=v;State.InfiniteJumpEnabled=v;local h=getHum();if h then h.UseJumpPower=true;h.JumpPower=v and 300 or 50 end end)
+makeToggle("Noclip","CanCollide = false en personaje",3,function(v)State.NoclipEnabled=v;if not v and LocalPlayer and LocalPlayer.Character then for _,p in ipairs(LocalPlayer.Character:GetDescendants())do if p:IsA("BasePart")then p.CanCollide=true end end end end)
+makeToggle("Invisible","LocalTransparencyModifier en partes",4,function(v)State.InvisibleEnabled=v;pcall(function()local c=LocalPlayer and LocalPlayer.Character;if c then for _,p in ipairs(c:GetDescendants())do if p:IsA("BasePart")and p.Name~="HumanoidRootPart"then p.LocalTransparencyModifier=v and 1 or 0 end end end end)end)
+makeToggle("TP Tool","Teletransporta al punto apuntado",5,function(v)State.TpToolEnabled=v;if v then giveTP()elseif tpTool then tpTool:Destroy();tpTool=nil end end)
+makeToggle("ESP Enemigos","Resalta enemigos con Highlight",6,function(v)State.EspEnabled=v;updESP()end)
+
+UserInputService.JumpRequest:Connect(function()if State.InfiniteJumpEnabled then pcall(function()local h=getHum();if h then h:ChangeState(Enum.HumanoidStateType.Jumping)end end)end end)
+RunService.Stepped:Connect(function()if State.NoclipEnabled then pcall(function()local c=LocalPlayer and LocalPlayer.Character;if c then for _,p in ipairs(c:GetDescendants())do if p:IsA("BasePart")then p.CanCollide=false end end end end)end end)
+RunService.Heartbeat:Connect(function()
+	if State.SpeedEnabled then pcall(function()local h=getHum();if h and h.WalkSpeed~=100 then h.WalkSpeed=100 end end)end
+	if State.JumpEnabled then pcall(function()local h=getHum();if h then h.UseJumpPower=true;if h.JumpPower~=300 then h.JumpPower=300 end end end)end
+	if State.InvisibleEnabled then pcall(function()local c=LocalPlayer and LocalPlayer.Character;if c then for _,p in ipairs(c:GetDescendants())do if p:IsA("BasePart")and p.Name~="HumanoidRootPart"then p.LocalTransparencyModifier=1 end end end end)end
+end)
+LocalPlayer.CharacterAdded:Connect(function()task.wait(0.4);if State.TpToolEnabled then pcall(giveTP)end;if State.EspEnabled then pcall(updESP)end end)
+Players.PlayerAdded:Connect(function(p)p.CharacterAdded:Connect(function()if State.EspEnabled then task.wait(0.3);pcall(updESP)end end)end)
+Players.PlayerRemoving:Connect(function()if State.EspEnabled then pcall(updESP)end end)
