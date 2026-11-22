@@ -1,0 +1,553 @@
+local repS,plrs,runS,uis,lplr=cloneref(game:GetService("ReplicatedStorage")),cloneref(game:GetService("Players")),cloneref(game:GetService("RunService")),cloneref(game:GetService("UserInputService")),cloneref(game:GetService("Players").LocalPlayer)
+local util,enum=require(repS.Modules.Utility),require(repS.Modules.EnumLibrary)
+local FighterController,SpectateController=require(lplr.PlayerScripts.Controllers.FighterController),require(lplr.PlayerScripts.Controllers:WaitForChild("SpectateController"))
+local cam=workspace.CurrentCamera
+
+getgenv().Config=getgenv().Config or {}
+local defaults={
+	Enabled=true,Ragebot=true,Triggerbot=true,ESP=true,Invisible=true,WallCheck=true,AntiKnife=true,
+	FireRate=0,BurstPackets=6,TriggerBurst=6,TriggerFOV=115,WeaponSlot="Primary",AutoEquip=true,
+	HitboxExpander=true,HitboxSize=18,OscillationSpeed=70,BaseHeight=3.0,KnifeHeight=3.0,
+	KnifeForward=2.0,AntiKnifeForward=2.0,AntiKnifeUp=3.0,YellowExtraHeight=3.5,CycleDuration=1.0,
+	Void99k=99000,Threat500k=505000,NPCVoidHeight=505000,NPCBackOffset=2.0,NPCUpOffset=50.0,
+	GhostTransparency=0.45,Duel2v2SmartSwitch=true,
+	UIMinimized=false,UIClosed=false,
+	UIPositions={
+		Main={XScale=0.02,XOffset=0,YScale=0.14,YOffset=0},
+		TargetList={XScale=0.02,XOffset=0,YScale=0.56,YOffset=0}
+	}
+}
+for k,v in pairs(defaults)do
+	if getgenv().Config[k]==nil then
+		getgenv().Config[k]=v
+	elseif type(v)=="table" and type(getgenv().Config[k])=="table" then
+		for sk,sv in pairs(v)do
+			if getgenv().Config[k][sk]==nil then getgenv().Config[k][sk]=sv end
+		end
+	end
+end
+
+local function saveUDimPos(key,udim)
+	local posCfg=getgenv().Config.UIPositions
+	if not posCfg then posCfg={};getgenv().Config.UIPositions=posCfg end
+	posCfg[key]={XScale=udim.X.Scale,XOffset=udim.X.Offset,YScale=udim.Y.Scale,YOffset=udim.Y.Offset}
+end
+
+local function loadUDimPos(key,fallback)
+	local posCfg=getgenv().Config.UIPositions
+	local d=posCfg and posCfg[key]
+	if not d then return fallback end
+	return UDim2.new(d.XScale or fallback.X.Scale,d.XOffset or fallback.X.Offset,d.YScale or fallback.Y.Scale,d.YOffset or fallback.Y.Offset)
+end
+
+local function makeDraggable(handle,targetFrame,posKey)
+	local dragging,dragInput,dragStart,startPos=false,nil,nil,nil
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+			dragging=true;dragStart=input.Position;startPos=targetFrame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState==Enum.UserInputState.End then
+					dragging=false
+					if posKey then saveUDimPos(posKey,targetFrame.Position)end
+				end
+			end)
+		end
+	end)
+	handle.InputChanged:Connect(function(input)
+		if input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch then
+			dragInput=input
+		end
+	end)
+	uis.InputChanged:Connect(function(input)
+		if dragging and input==dragInput then
+			local delta=input.Position-dragStart
+			targetFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+		end
+	end)
+end
+
+local wES={
+["Assault Rifle"]="Rifle de Asalto",["Burst Rifle"]="Rifle de Ráfagas",["Shotgun"]="Escopeta",["Sniper"]="Francotirador",["Crossbow"]="Ballesta",["Bow"]="Arco",["RPG"]="Lanzacohetes",["Minigun"]="Ametralladora",["Flamethrower"]="Lanzallamas",["Energy Rifle"]="Rifle de Energía",["Paintball Gun"]="Pistola de Paintball",["Permafrost"]="Permafrost",["Distortion"]="Distorsión",["Gunblade"]="Espada Pistola",["Wildcat"]="Wildcat",["Scepter"]="Cetro",["Grenade Launcher"]="Lanzagranadas",["Submachine Gun"]="Subfusil",
+["Handgun"]="Pistola",["Uzi"]="Uzi",["Revolver"]="Revólver",["Shorty"]="Escopeta Corta",["Flare Gun"]="Pistola de Bengalas",["Spray"]="Spray",["Slingshot"]="Resortera",["Exogun"]="Exopistola",["Energy Pistols"]="Pistolas de Energía",["Warper"]="Teletransportador",["Glass Cannon"]="Cañón de Cristal",["Freeze Ray"]="Rayo Congelante",
+["Katana"]="Katana",["Knife"]="Cuchillo",["Daggers"]="Dagas",["Scythe"]="Guadaña",["Spear"]="Lanza",["Maul"]="Mazo",["Trowel"]="Paleta",["Riot Shield"]="Escudo Antidisturbios",["Fists"]="Puños",["Battle Axe"]="Hacha de Batalla",["Chainsaw"]="Motosierra",["Glass Shard"]="Fragmento de Cristal",["Glast Shard"]="Fragmento de Cristal",
+["Grappler"]="Gancho",["Medkit"]="Botiquín",["Jump Pad"]="Plataforma de Salto",["Molotov"]="Cóctel Molotov",["Flashbang"]="Granada Cegadora",["Smoke Grenade"]="Granada de Humo",["Satchel"]="Carga Explosiva",["Subspace Tripmine"]="Mina Subespacial",["Warpstone"]="Piedra de Teletransporte",["War Horn"]="Cuerno de Guerra",["Elixir"]="Elixir",["RNG Dice"]="Dados RNG",["Holodome"]="Holodomo"
+}
+local function transW(w)return wES[w]or w or"Ninguna"end
+
+local threatWeapons={["Knife"]=true,["Cuchillo"]=true,["Katana"]=true,["Subspace Tripmine"]=true,["Mina Subespacial"]=true}
+local selectedTargetPlayer,alertLbl,weaponBtn,targetBtn,rageBtn,tbBtn,wallBtn,antiKnifeBtn,espBtn,invisBtn,targetListFrame=nil
+local npcBackClone,npcUpClone=nil,nil
+local lastFire,lastUIUpdate,enemyWep=0,0,{}
+local espCache,savedTransparencies,savedCollide={}, {}, {}
+local useItemRemote=repS:WaitForChild("Remotes"):WaitForChild("Replication"):WaitForChild("Fighter"):WaitForChild("UseItem")
+local startShootingEnum=enum:ToEnum("StartShooting")
+local k1,k0,k2,k3=utf8.char(1),utf8.char(0),utf8.char(2),utf8.char(3)
+local cycleStart,isWaiting99k=tick(),false
+
+local function isEnemy(p)
+if not p or p==lplr then return false end
+local duel=SpectateController.CurrentDuelSubject
+if duel and duel.Duelers then
+local myTeam=nil
+for _,du in ipairs(duel.Duelers)do if du.Player==lplr then myTeam=du:Get("TeamID")if myTeam==nil then myTeam=du.TeamID end break end end
+if myTeam~=nil then
+for _,du in ipairs(duel.Duelers)do if du.Player==p then local theirTeam=du:Get("TeamID")if theirTeam==nil then theirTeam=du.TeamID end if theirTeam~=nil then return theirTeam~=myTeam end end end
+end
+end
+if lplr:GetAttribute("TeamID")~=nil and p:GetAttribute("TeamID")~=nil then return lplr:GetAttribute("TeamID")~=p:GetAttribute("TeamID")end
+if lplr.Team and p.Team then return lplr.Team~=p.Team end
+return true
+end
+
+local function hasLineOfSight(originPos,targetPart,targetChar)
+if not getgenv().Config.WallCheck then return true end
+if not targetPart or not targetPart.Parent then return false end
+local params=RaycastParams.new()
+params.FilterType=Enum.RaycastFilterType.Exclude
+local ignore={cam}
+if lplr.Character then table.insert(ignore,lplr.Character)end
+if targetChar then table.insert(ignore,targetChar)end
+if npcBackClone then table.insert(ignore,npcBackClone)end
+if npcUpClone then table.insert(ignore,npcUpClone)end
+params.FilterDescendantsInstances=ignore
+params.IgnoreWater=true
+local dir=targetPart.Position-originPos
+if dir.Magnitude<=0.01 then return true end
+local res=workspace:Raycast(originPos,dir,params)
+if not res then return true end
+if targetChar and res.Instance:IsDescendantOf(targetChar)then return true end
+return false
+end
+
+local function clearESP()
+for p,data in pairs(espCache)do
+if data.billboard then pcall(function()data.billboard:Destroy()end)end
+if data.box then pcall(function()data.box:Destroy()end)end
+espCache[p]=nil
+end
+end
+
+local function updateESP(myRoot)
+local active=getgenv().Config.Enabled and getgenv().Config.Ragebot and getgenv().Config.ESP
+if not active then clearESP();return end
+for p,data in pairs(espCache)do
+if not p.Parent or not isEnemy(p)or not p.Character then
+if data.billboard then pcall(function()data.billboard:Destroy()end)end
+if data.box then pcall(function()data.box:Destroy()end)end
+espCache[p]=nil
+end
+end
+for _,p in ipairs(plrs:GetPlayers())do
+if isEnemy(p)and p.Character then
+local char=p.Character
+local hrp=char:FindFirstChild("HumanoidRootPart")
+local head=char:FindFirstChild("Head")
+local hum=char:FindFirstChildOfClass("Humanoid")
+if hrp and head and hum and hum.Health>0 then
+local entry=espCache[p]
+if not entry then
+entry={}
+local box=Instance.new("BoxHandleAdornment");box.Name="__RageESPBox";box.Adornee=hrp;box.Size=Vector3.new(4.2,5.6,2.5);box.Color3=Color3.fromRGB(255,60,60);box.Transparency=0.72;box.ZIndex=5;box.AlwaysOnTop=true;box.Parent=hrp;entry.box=box
+local bb=Instance.new("BillboardGui");bb.Name="__RageESPInfo";bb.Adornee=head;bb.Size=UDim2.new(0,180,0,46);bb.StudsOffset=Vector3.new(0,2.6,0);bb.AlwaysOnTop=true;bb.Parent=head
+local lbl=Instance.new("TextLabel");lbl.Size=UDim2.new(1,0,1,0);lbl.BackgroundTransparency=1;lbl.TextColor3=Color3.new(1,1,1);lbl.TextStrokeTransparency=0.2;lbl.Font=Enum.Font.GothamBold;lbl.TextSize=11;lbl.TextWrapped=true;lbl.Parent=bb;entry.billboard=bb;entry.label=lbl
+espCache[p]=entry
+end
+local dist=myRoot and math.floor((myRoot.Position-hrp.Position).Magnitude)or 0
+entry.label.Text=string.format("%s\nHP: %d/%d | %d studs",p.Name,math.floor(hum.Health),math.max(1,math.floor(hum.MaxHealth)),dist)
+elseif espCache[p]then
+if espCache[p].billboard then pcall(function()espCache[p].billboard:Destroy()end)end
+if espCache[p].box then pcall(function()espCache[p].box:Destroy()end)end
+espCache[p]=nil
+end
+end
+end
+end
+
+local function setCharacterInvisible(char,makeInvis)
+if not char then return end
+for _,v in ipairs(char:GetDescendants())do
+if v:IsA("BasePart")and v.Name~="HumanoidRootPart"then
+if makeInvis then
+if savedTransparencies[v]==nil then savedTransparencies[v]=v.Transparency end
+if savedCollide[v]==nil then savedCollide[v]=v.CanCollide end
+v.LocalTransparencyModifier=1;v.Transparency=1;v.CanCollide=false
+else
+if savedTransparencies[v]~=nil then v.LocalTransparencyModifier=0;v.Transparency=savedTransparencies[v];savedTransparencies[v]=nil end
+if savedCollide[v]~=nil then v.CanCollide=savedCollide[v];savedCollide[v]=nil end
+end
+elseif v:IsA("Decal")or v:IsA("Texture")then
+if makeInvis then if savedTransparencies[v]==nil then savedTransparencies[v]=v.Transparency end;v.Transparency=1
+elseif savedTransparencies[v]~=nil then v.Transparency=savedTransparencies[v];savedTransparencies[v]=nil end
+end
+end
+end
+
+local function destroySingleNPC(npc)if npc then pcall(function()npc:Destroy()end)end end
+local function clearDualNPCs()destroySingleNPC(npcBackClone);npcBackClone=nil;destroySingleNPC(npcUpClone);npcUpClone=nil end
+local function cleanupRageVisuals(char,restoreNormal)clearDualNPCs();clearESP();if restoreNormal then setCharacterInvisible(char or lplr.Character,false)end end
+
+local function paintToggle(btn,label,active)
+if not btn then return end
+btn.Text=(active and"●  "or"○  ")..label..(active and" : ON"or" : OFF")
+btn.BackgroundColor3=active and Color3.fromRGB(36,118,74)or Color3.fromRGB(38,40,48)
+end
+
+local function syncRageUI(state)
+paintToggle(rageBtn,"Ragebot",state)
+paintToggle(tbBtn,"Triggerbot",getgenv().Config.Triggerbot)
+paintToggle(wallBtn,"Wall Check",getgenv().Config.WallCheck)
+paintToggle(antiKnifeBtn,"Anti Knife",getgenv().Config.AntiKnife)
+paintToggle(espBtn,"ESP Box / Info",getgenv().Config.ESP)
+paintToggle(invisBtn,"Invisible",getgenv().Config.Invisible)
+if weaponBtn then weaponBtn.Text="⚔  Weapon Slot : "..getgenv().Config.WeaponSlot end
+if targetBtn and not selectedTargetPlayer then targetBtn.Text="🎯  Target : Auto (2v2)"end
+if targetListFrame and not state then targetListFrame.Visible=false end
+if not state then
+cleanupRageVisuals(lplr.Character,true)
+if alertLbl then alertLbl.Text="⏸️ Rayfield Ragebot OFF - Movimiento normal";alertLbl.BackgroundColor3=Color3.fromRGB(45,47,56)end
+end
+end
+
+local function makeRayfieldUI()
+local pg=lplr:FindFirstChild("PlayerGui")or lplr:WaitForChild("PlayerGui",10)
+if not pg then return end
+if pg:FindFirstChild("RayfieldRivalsGUI")then pg.RayfieldRivalsGUI:Destroy()end
+
+local gui=Instance.new("ScreenGui");gui.Name="RayfieldRivalsGUI";gui.ResetOnSpawn=false;gui.Parent=pg
+
+-- Anuncio fijo (no movible)
+alertLbl=Instance.new("TextLabel")
+alertLbl.Size=UDim2.new(0,490,0,34)
+alertLbl.Position=UDim2.new(0.5,-245,0.025,0)
+alertLbl.BackgroundColor3=Color3.fromRGB(22,23,28);alertLbl.BackgroundTransparency=0.08
+alertLbl.Text="RAYFIELD | Buscando enemigos (2v2 / 1v1)...";alertLbl.TextColor3=Color3.fromRGB(240,242,248)
+alertLbl.Font=Enum.Font.GothamBold;alertLbl.TextSize=12;alertLbl.Active=false;alertLbl.Parent=gui
+Instance.new("UICorner",alertLbl).CornerRadius=UDim.new(0,8)
+local aStroke=Instance.new("UIStroke",alertLbl);aStroke.Color=Color3.fromRGB(68,72,86);aStroke.Thickness=1
+
+local winH=362
+local main=Instance.new("Frame")
+main.Name="RayfieldWindow";main.Size=UDim2.new(0,255,0,getgenv().Config.UIMinimized and 38 or winH)
+main.Position=loadUDimPos("Main",UDim2.new(0.02,0,0.14,0))
+main.Visible=not getgenv().Config.UIClosed
+main.BackgroundColor3=Color3.fromRGB(20,21,26);main.BorderSizePixel=0;main.Active=true;main.Parent=gui
+Instance.new("UICorner",main).CornerRadius=UDim.new(0,10)
+local mStroke=Instance.new("UIStroke",main);mStroke.Color=Color3.fromRGB(60,64,78);mStroke.Thickness=1.2
+
+local topBar=Instance.new("Frame")
+topBar.Size=UDim2.new(1,0,0,38);topBar.BackgroundColor3=Color3.fromRGB(27,29,36);topBar.BorderSizePixel=0;topBar.Active=true;topBar.Parent=main
+Instance.new("UICorner",topBar).CornerRadius=UDim.new(0,10)
+
+local titleLbl=Instance.new("TextLabel")
+titleLbl.Size=UDim2.new(1,-76,1,0);titleLbl.Position=UDim2.new(0,12,0,0);titleLbl.BackgroundTransparency=1
+titleLbl.Text="RAYFIELD  //  RIVALS";titleLbl.TextXAlignment=Enum.TextXAlignment.Left
+titleLbl.TextColor3=Color3.fromRGB(245,247,255);titleLbl.Font=Enum.Font.GothamBold;titleLbl.TextSize=13;titleLbl.Parent=topBar
+
+local minBtn=Instance.new("TextButton")
+minBtn.Size=UDim2.new(0,26,0,24);minBtn.Position=UDim2.new(1,-62,0.5,-12);minBtn.BackgroundColor3=Color3.fromRGB(42,45,56)
+minBtn.Text=getgenv().Config.UIMinimized and"+"or"-"
+minBtn.TextColor3=Color3.new(1,1,1);minBtn.Font=Enum.Font.GothamBold;minBtn.TextSize=14;minBtn.Parent=topBar
+Instance.new("UICorner",minBtn).CornerRadius=UDim.new(0,6)
+
+local closeBtn=Instance.new("TextButton")
+closeBtn.Size=UDim2.new(0,26,0,24);closeBtn.Position=UDim2.new(1,-32,0.5,-12);closeBtn.BackgroundColor3=Color3.fromRGB(125,38,44)
+closeBtn.Text="×";closeBtn.TextColor3=Color3.new(1,1,1);closeBtn.Font=Enum.Font.GothamBold;closeBtn.TextSize=14;closeBtn.Parent=topBar
+Instance.new("UICorner",closeBtn).CornerRadius=UDim.new(0,6)
+
+local body=Instance.new("Frame")
+body.Size=UDim2.new(1,-16,1,-48);body.Position=UDim2.new(0,8,0,44);body.BackgroundTransparency=1
+body.Visible=not getgenv().Config.UIMinimized;body.Parent=main
+local layout=Instance.new("UIListLayout",body);layout.Padding=UDim.new(0,6)
+
+minBtn.MouseButton1Click:Connect(function()
+getgenv().Config.UIMinimized=not getgenv().Config.UIMinimized
+body.Visible=not getgenv().Config.UIMinimized
+main.Size=getgenv().Config.UIMinimized and UDim2.new(0,255,0,38)or UDim2.new(0,255,0,winH)
+minBtn.Text=getgenv().Config.UIMinimized and"+"or"-"
+saveUDimPos("Main",main.Position)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+getgenv().Config.UIClosed=true
+main.Visible=false
+if targetListFrame then targetListFrame.Visible=false end
+saveUDimPos("Main",main.Position)
+end)
+
+makeDraggable(topBar,main,"Main")
+
+local function mkRow(name,txt,col,cb)
+local b=Instance.new("TextButton")
+b.Name=name;b.Size=UDim2.new(1,0,0,32);b.BackgroundColor3=col;b.BorderSizePixel=0
+b.Text=txt;b.TextColor3=Color3.new(1,1,1);b.Font=Enum.Font.GothamSemibold;b.TextSize=12;b.Parent=body
+Instance.new("UICorner",b).CornerRadius=UDim.new(0,7)
+local s=Instance.new("UIStroke",b);s.Color=Color3.fromRGB(55,58,70);s.Thickness=1
+b.MouseButton1Click:Connect(cb);return b
+end
+
+rageBtn=mkRow("Ragebot","●  Ragebot : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.Ragebot=not getgenv().Config.Ragebot
+syncRageUI(getgenv().Config.Ragebot)
+end)
+
+tbBtn=mkRow("Triggerbot","●  Triggerbot : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.Triggerbot=not getgenv().Config.Triggerbot
+paintToggle(tbBtn,"Triggerbot",getgenv().Config.Triggerbot)
+end)
+
+wallBtn=mkRow("WallCheck","●  Wall Check : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.WallCheck=not getgenv().Config.WallCheck
+paintToggle(wallBtn,"Wall Check",getgenv().Config.WallCheck)
+end)
+
+antiKnifeBtn=mkRow("AntiKnife","●  Anti Knife : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.AntiKnife=not getgenv().Config.AntiKnife
+paintToggle(antiKnifeBtn,"Anti Knife",getgenv().Config.AntiKnife)
+end)
+
+weaponBtn=mkRow("Weapon","⚔  Weapon Slot : Primary",Color3.fromRGB(34,46,68),function()
+if getgenv().Config.WeaponSlot=="Primary"then getgenv().Config.WeaponSlot="Secondary"
+elseif getgenv().Config.WeaponSlot=="Secondary"then getgenv().Config.WeaponSlot="Melee"
+else getgenv().Config.WeaponSlot="Primary"end
+weaponBtn.Text="⚔  Weapon Slot : "..getgenv().Config.WeaponSlot
+end)
+
+espBtn=mkRow("ESP","●  ESP Box / Info : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.ESP=not getgenv().Config.ESP
+paintToggle(espBtn,"ESP Box / Info",getgenv().Config.ESP)
+if not getgenv().Config.ESP then clearESP()end
+end)
+
+invisBtn=mkRow("Invisible","●  Invisible : ON",Color3.fromRGB(36,118,74),function()
+getgenv().Config.Invisible=not getgenv().Config.Invisible
+paintToggle(invisBtn,"Invisible",getgenv().Config.Invisible)
+if not getgenv().Config.Invisible then setCharacterInvisible(lplr.Character,false)end
+end)
+
+targetListFrame=Instance.new("ScrollingFrame")
+targetListFrame.Size=UDim2.new(0,220,0,155)
+targetListFrame.Position=loadUDimPos("TargetList",UDim2.new(0.02,0,0.56,0))
+targetListFrame.BackgroundColor3=Color3.fromRGB(22,23,28);targetListFrame.BorderSizePixel=0
+targetListFrame.ScrollBarThickness=4;targetListFrame.Visible=false;targetListFrame.Active=true;targetListFrame.Parent=gui
+Instance.new("UICorner",targetListFrame).CornerRadius=UDim.new(0,8)
+local tStroke=Instance.new("UIStroke",targetListFrame);tStroke.Color=Color3.fromRGB(68,72,86);tStroke.Thickness=1
+Instance.new("UIListLayout",targetListFrame).Padding=UDim.new(0,4)
+makeDraggable(targetListFrame,targetListFrame,"TargetList")
+
+local function refreshList()
+for _,c in ipairs(targetListFrame:GetChildren())do if c:IsA("TextButton")then c:Destroy()end end
+local ab=Instance.new("TextButton");ab.Size=UDim2.new(1,-8,0,28)
+ab.BackgroundColor3=selectedTargetPlayer==nil and Color3.fromRGB(36,118,74)or Color3.fromRGB(40,42,50)
+ab.Text="Automático (2v2 Smart)";ab.TextColor3=Color3.new(1,1,1);ab.Font=Enum.Font.GothamBold;ab.TextSize=11;ab.Parent=targetListFrame
+Instance.new("UICorner",ab).CornerRadius=UDim.new(0,6)
+ab.MouseButton1Click:Connect(function()selectedTargetPlayer=nil;targetBtn.Text="🎯  Target : Auto (2v2)";targetListFrame.Visible=false end)
+for _,p in ipairs(plrs:GetPlayers())do
+if isEnemy(p)then
+local pb=Instance.new("TextButton");pb.Size=UDim2.new(1,-8,0,28)
+pb.BackgroundColor3=(selectedTargetPlayer==p)and Color3.fromRGB(36,118,74)or Color3.fromRGB(40,42,50)
+pb.Text=p.Name;pb.TextColor3=Color3.new(1,1,1);pb.Font=Enum.Font.GothamSemibold;pb.TextSize=11;pb.Parent=targetListFrame
+Instance.new("UICorner",pb).CornerRadius=UDim.new(0,6)
+pb.MouseButton1Click:Connect(function()selectedTargetPlayer=p;targetBtn.Text="🎯  Target : "..p.Name;targetListFrame.Visible=false end)
+end
+end
+end
+
+targetBtn=mkRow("SelectTarget","🎯  Target : Auto (2v2)",Color3.fromRGB(42,46,60),function()
+targetListFrame.Visible=not targetListFrame.Visible
+if targetListFrame.Visible then refreshList()end
+end)
+
+syncRageUI(getgenv().Config.Ragebot)
+end
+
+task.spawn(makeRayfieldUI)
+lplr.CharacterAdded:Connect(function()table.clear(savedTransparencies);table.clear(savedCollide);task.wait(0.3);makeRayfieldUI()end)
+plrs.PlayerRemoving:Connect(function(p)enemyWep[p]=nil;if espCache[p]then if espCache[p].billboard then pcall(function()espCache[p].billboard:Destroy()end)end;if espCache[p].box then pcall(function()espCache[p].box:Destroy()end)end;espCache[p]=nil end;if selectedTargetPlayer==p then selectedTargetPlayer=nil;if targetBtn then targetBtn.Text="🎯  Target : Auto (2v2)"end end end)
+local slots={Primary=1,Secondary=2,Melee=3}
+task.spawn(function()while true do task.wait(0.35)if getgenv().Config.AutoEquip and getgenv().Config.Enabled and getgenv().Config.Ragebot and FighterController.LocalFighter then pcall(function()FighterController.LocalFighter:EquipItem(slots[getgenv().Config.WeaponSlot]or 1)end)end end end)
+task.spawn(function()while true do task.wait(0.2)if getgenv().Config.HitboxExpander and getgenv().Config.Ragebot and FighterController.Objects then local s=getgenv().Config.HitboxSize;local tv=Vector3.new(s,s,s);for _,o in pairs(FighterController.Objects)do local p=o.Player;if p and isEnemy(p)and p.Character then local r=p.Character:FindFirstChild("HumanoidRootPart");if r and r.Size~=tv then pcall(function()r.Size=tv;r.Transparency=0.8;r.CanCollide=false end)end end end end end end)
+
+local function applyGhostAppearance(cloneModel,alpha)
+local t=math.clamp(tonumber(alpha)or 0.45,0.1,0.85)
+for _,v in ipairs(cloneModel:GetDescendants())do
+if v:IsA("Script")or v:IsA("LocalScript")or v:IsA("Animator")or v:IsA("Sound")then
+v:Destroy()
+elseif v:IsA("BasePart")then
+v.Anchored=true;v.CanCollide=false;v.Massless=true
+if v.Name=="HumanoidRootPart"then
+v.Transparency=1
+else
+v.Material=Enum.Material.ForceField
+v.Transparency=t
+end
+elseif v:IsA("Decal")or v:IsA("Texture")then
+v.Transparency=t
+elseif v:IsA("Humanoid")then
+v.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+v.PlatformStand=true
+end
+end
+end
+
+local function buildGhostClone(char,nameTag,scf,alpha)
+if not char then return nil end
+char.Archivable=true
+local cl=char:Clone()
+if not cl then return nil end
+cl.Name=nameTag
+applyGhostAppearance(cl,alpha)
+if cl.PrimaryPart then cl:SetPrimaryPartCFrame(scf)
+elseif cl:FindFirstChild("HumanoidRootPart")then cl.HumanoidRootPart.CFrame=scf end
+cl.Parent=workspace
+return cl
+end
+
+local function positionClone(cl,scf)
+if not cl or not cl.Parent then return end
+if cl.PrimaryPart then cl:SetPrimaryPartCFrame(scf)
+elseif cl:FindFirstChild("HumanoidRootPart")then cl.HumanoidRootPart.CFrame=scf end
+end
+
+-- 2 clones del jugador al activar Ragebot: uno atrás (~2 studs) y otro 50 studs arriba
+local function updatePlayerGhostClones(myChar,myRoot,now)
+if not myChar or not myRoot or not getgenv().Config.Ragebot then clearDualNPCs();return end
+local alpha=tonumber(getgenv().Config.GhostTransparency)or 0.45
+local backDist=tonumber(getgenv().Config.NPCBackOffset)or 2.0
+local upDist=tonumber(getgenv().Config.NPCUpOffset)or 50.0
+
+local backCF=myRoot.CFrame*CFrame.new(0,0,backDist)
+local upCF=CFrame.new(myRoot.Position+Vector3.new(0,upDist+math.sin(now*3)*0.6,0))*myRoot.CFrame.Rotation
+
+if not npcBackClone or not npcBackClone.Parent then
+npcBackClone=buildGhostClone(myChar,"__PlayerGhost_Back2Studs",backCF,alpha)
+else
+positionClone(npcBackClone,backCF)
+end
+
+if not npcUpClone or not npcUpClone.Parent then
+npcUpClone=buildGhostClone(myChar,"__PlayerGhost_Up50Studs",upCF,alpha)
+else
+positionClone(npcUpClone,upCF)
+end
+end
+
+local function getWep(eq)return eq and(eq.Name or(eq.ViewModel and eq.ViewModel.Name))or nil end
+
+local function getTriggerPart(enemyList,originPos)
+cam=workspace.CurrentCamera
+if not cam or #enemyList==0 then return nil,nil end
+local center=Vector2.new(cam.ViewportSize.X*0.5,cam.ViewportSize.Y*0.5)
+local fovR=tonumber(getgenv().Config.TriggerFOV)or 115
+local bestPart,bestPlayer,bestMag=nil,nil,math.huge
+local rayOrigin=originPos or cam.CFrame.Position
+for _,e in ipairs(enemyList)do
+for _,pt in ipairs({e.head,e.root})do
+if pt and pt.Parent then
+local sp,onScreen=cam:WorldToViewportPoint(pt.Position)
+if onScreen and sp.Z>0 then
+local mag=(Vector2.new(sp.X,sp.Y)-center).Magnitude
+if mag<=fovR and mag<bestMag and hasLineOfSight(rayOrigin,pt,e.char)then
+bestMag,bestPart,bestPlayer=mag,pt,e.player
+end
+end
+end
+end
+end
+return bestPart,bestPlayer
+end
+
+local function fireHyperBurst(item,originCF,targetHead,enemyList,triggerPart)
+if not item then return end;local objId=item:Get("ObjectID");if not objId then return end
+local burstCount=math.max(1,tonumber(getgenv().Config.BurstPackets)or 6)
+local targets=#enemyList>0 and enemyList or {{head=targetHead}}
+for i=1,burstCount do
+local h=targets[((i-1)%#targets)+1].head or targetHead
+if h and h.Parent then
+local aimCF,tCF=CFrame.lookAt(originCF,h.Position),h.CFrame
+local aPos=h.Position+Vector3.new((math.random()-0.5)*0.09,(math.random()-0.5)*0.09,(math.random()-0.5)*0.09)
+pcall(function()useItemRemote:FireServer(objId,startShootingEnum,{[k1]={[k0]=util:EncodeCFrame(aimCF),[k1]=util:EncodeCFrame(tCF),[k2]=h,[k3]=util:EncodeCFrame(h.CFrame:ToObjectSpace(CFrame.new(aPos)))}},nil)end)
+end
+end
+if getgenv().Config.Triggerbot and triggerPart and triggerPart.Parent then
+local tCount=math.max(1,tonumber(getgenv().Config.TriggerBurst)or 6)
+for _=1,tCount do
+local tAimCF,tPartCF=CFrame.lookAt(originCF,triggerPart.Position),triggerPart.CFrame
+local tHitPos=triggerPart.Position+Vector3.new((math.random()-0.5)*0.06,(math.random()-0.5)*0.06,(math.random()-0.5)*0.06)
+pcall(function()useItemRemote:FireServer(objId,startShootingEnum,{[k1]={[k0]=util:EncodeCFrame(tAimCF),[k1]=util:EncodeCFrame(tPartCF),[k2]=triggerPart,[k3]=util:EncodeCFrame(triggerPart.CFrame:ToObjectSpace(CFrame.new(tHitPos)))}},nil)end)
+end
+end
+end
+
+runS.Heartbeat:Connect(function()
+if not FighterController.Objects or not getgenv().Config.Enabled or not getgenv().Config.Ragebot then cleanupRageVisuals(lplr.Character,true);return end
+local now=tick();local myChar=lplr.Character;local myRoot=myChar and myChar:FindFirstChild("HumanoidRootPart");if not myRoot then return end
+setCharacterInvisible(myChar,getgenv().Config.Invisible);updateESP(myRoot)
+updatePlayerGhostClones(myChar,myRoot,now)
+
+local sP,sR,sH,sC,bestScore=nil,nil,nil,nil,-math.huge;local validEnemies={}
+for _,o in pairs(FighterController.Objects)do
+local p=o.Player
+if p and isEnemy(p)and o.Entity and o.Entity:IsAlive()and not o:Get("IsSpectating")then
+local wn=getWep(o.EquippedItem);enemyWep[p]=wn;local pc=p.Character;local r=pc and pc:FindFirstChild("HumanoidRootPart");local h=pc and pc:FindFirstChild("Head");local hum=pc and pc:FindFirstChildOfClass("Humanoid")
+if r and h and(not hum or hum.Health>0)then
+local dist=(myRoot.Position-r.Position).Magnitude;local hp=hum and hum.Health or 100;local isSafe=(not wn)or(not threatWeapons[wn])
+table.insert(validEnemies,{player=p,char=pc,root=r,head=h,hp=hp,dist=dist,safe=isSafe})
+if selectedTargetPlayer and p==selectedTargetPlayer then sP,sR,sH,sC=p,r,h,pc
+elseif not selectedTargetPlayer then local score=-dist-(hp*0.45)+(isSafe and 35 or -60);if score>bestScore then bestScore,sP,sR,sH,sC=score,p,r,h,pc end end
+end
+end
+end
+if selectedTargetPlayer and not sP and getgenv().Config.Duel2v2SmartSwitch and #validEnemies>0 then table.sort(validEnemies,function(a,b)return a.dist<b.dist end);sP,sR,sH,sC=validEnemies[1].player,validEnemies[1].root,validEnemies[1].head,validEnemies[1].char end
+if(now-cycleStart)>=getgenv().Config.CycleDuration then isWaiting99k=not isWaiting99k;cycleStart=now end
+local trigPart,trigPlayer=getTriggerPart(validEnemies,myRoot.Position)
+if not sP or not sH or not sR or not FighterController.LocalFighter then if(now-lastUIUpdate)>=0.08 and alertLbl then lastUIUpdate=now;alertLbl.Text="RAYFIELD | Buscando enemigos válidos (2v2 / 1v1)...";alertLbl.BackgroundColor3=Color3.fromRGB(40,42,50)end;return end
+
+local is2v2=#validEnemies>=2
+local ew=enemyWep[sP]
+local isKnife=(ew=="Knife"or ew=="Cuchillo")
+local hasThreatWeapon=ew and threatWeapons[ew]or false
+local isRedAlert=(not is2v2)and hasThreatWeapon and not(getgenv().Config.AntiKnife and isKnife)
+local isAntiKnifePurple=getgenv().Config.AntiKnife and isKnife
+
+local studsOsc=2.0+(((math.sin(now*getgenv().Config.OscillationSpeed)+1)*0.5)*2.0)
+local tPos
+if isAntiKnifePurple then
+	local fwd=tonumber(getgenv().Config.AntiKnifeForward)or 2.0
+	local up=tonumber(getgenv().Config.AntiKnifeUp)or 3.0
+	tPos=(sR.CFrame*CFrame.new(0,up,-fwd)).Position
+elseif isRedAlert then
+	tPos=sR.Position+Vector3.new(0,getgenv().Config.Threat500k,0)
+else
+	tPos=(sR.CFrame*CFrame.new(0,getgenv().Config.BaseHeight,studsOsc)).Position
+end
+
+local sCF=CFrame.lookAt(tPos,sH.Position)
+local targetVisible=hasLineOfSight(sCF.Position,sH,sC)
+
+if(now-lastUIUpdate)>=0.08 then
+lastUIUpdate=now
+if alertLbl then
+	local estado=isAntiKnifePurple and" [ANTI KNIFE +2 FWD / +3 UP]"or(isRedAlert and" [RIESGO 500K+]"or(is2v2 and" [2V2 -> STUDS]"or" [STUDS RAGEBOT]"))
+	local wcTag=getgenv().Config.WallCheck and(targetVisible and" | LOS: OK"or" | LOS: WALL")or""
+	local tbTag=(getgenv().Config.Triggerbot and trigPlayer)and(" | TB: "..trigPlayer.Name)or""
+	alertLbl.Text="🎯 "..sP.Name.." | Arma: "..transW(ew or"Mano")..estado..wcTag..tbTag
+	if isAntiKnifePurple then
+		alertLbl.BackgroundColor3=Color3.fromRGB(128,45,200)
+	elseif isRedAlert then
+		alertLbl.BackgroundColor3=Color3.fromRGB(165,42,48)
+	else
+		alertLbl.BackgroundColor3=Color3.fromRGB(28,125,72)
+	end
+end
+end
+
+local oCF,oV,oRV=myRoot.CFrame,myRoot.AssemblyLinearVelocity,myRoot.AssemblyAngularVelocity
+pcall(function()myRoot.AssemblyLinearVelocity=Vector3.zero;myRoot.AssemblyAngularVelocity=Vector3.zero;myRoot.CFrame=sCF end)
+pcall(function()runS:BindToRenderStep("__restore",101,function()if myRoot then myRoot.CFrame=oCF;myRoot.AssemblyLinearVelocity=oV;myRoot.AssemblyAngularVelocity=oRV end;runS:UnbindFromRenderStep("__restore")end)end)
+
+if isRedAlert then return end
+if not targetVisible and not trigPart then return end
+local item=FighterController.LocalFighter.EquippedItem
+if not item or(now-lastFire)<getgenv().Config.FireRate then return end
+lastFire=now;fireHyperBurst(item,sCF.Position,targetVisible and sH or nil,validEnemies,trigPart)
+end)
